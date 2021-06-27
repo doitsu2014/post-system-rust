@@ -1,73 +1,49 @@
-use futures::TryStreamExt as _;
-use hyper::header::HeaderValue;
-use hyper::header::CONTENT_TYPE;
-use hyper::header::HOST;
+use core::api::forwarder_api::client_request_response;
+use core::static_data::{INDEX, INTERNAL_SERVER_ERROR, NOT_FOUND};
+use core::GenericError;
+use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Method, Request, Response, Server, StatusCode};
-use std::convert::Infallible;
-use std::net::SocketAddr;
+use hyper::{Body, Client, Method, Request, Response, Server, StatusCode};
 
 #[tokio::main]
-async fn main() {
-    // We'll bind to 127.0.0.1:3000
-    let addr = SocketAddr::from(([127, 0, 0, 1], 3000));
+async fn main() -> Result<(), GenericError> {
+    pretty_env_logger::init();
+    let addr = "127.0.0.1:1337".parse().unwrap();
 
-    // A `Service` is needed for every connection, so this
-    // creates one from our `hello_world` function.
-    let make_svc = make_service_fn(|_conn| async {
-        // service_fn converts our function into a `Service`
-        Ok::<_, Infallible>(service_fn(hello_world))
+    let client = Client::new();
+    let new_service = make_service_fn(move |_| {
+        let client = client.clone();
+        async { Ok::<_, GenericError>(service_fn(move |req| forward_req(req, client.to_owned()))) }
     });
 
-    let server = Server::bind(&addr)
-        .serve(make_svc)
-        .with_graceful_shutdown(shutdown_signal());
+    let server = Server::bind(&addr).serve(new_service);
 
-    // Run this server for... forever!
-    if let Err(e) = server.await {
-        eprintln!("server error: {}", e);
-    }
+    println!("Listening on http://{}", addr);
+    server.await?;
+    Ok(())
 }
 
-async fn hello_world(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let mut response = Response::new(Body::empty());
-
+async fn forward_req(
+    req: Request<Body>,
+    client: Client<HttpConnector>,
+) -> Result<Response<Body>, GenericError> {
     match (req.method(), req.uri().path()) {
-        (&Method::GET, "/") => {
-            *response.body_mut() = Body::from("Try POSTing data to /echo");
-        }
-        (&Method::POST, "/echo") => {
-            *response.body_mut() = req.into_body();
-        }
-        (&Method::POST, "/echo/uppercase") => {
-            let mapping = req.into_body().map_ok(|chunk| {
-                chunk
-                    .iter()
-                    .map(|byte| byte.to_ascii_uppercase())
-                    .collect::<Vec<u8>>()
-            });
-            *response.body_mut() = Body::wrap_stream(mapping);
-        }
-        (&Method::POST, "/echo/reverse") => {
-            let full_body = hyper::body::to_bytes(req.into_body()).await?;
-
-            *response.body_mut() = 
-        }
+        (&Method::GET, "/") => Ok(Response::new(INDEX.into())),
+        (&Method::GET, "/internal-server-error") => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(INTERNAL_SERVER_ERROR.into())
+            .unwrap()),
+        (&Method::POST, "/forwarder") => client_request_response(&client).await,
+        (&Method::POST, "/forwarder/internal-server-error") => Ok(Response::builder()
+            .status(StatusCode::INTERNAL_SERVER_ERROR)
+            .body(r#"{"message": "Internal server error messages"}"#.into())
+            .unwrap()),
         _ => {
-            *response.status_mut() = StatusCode::NOT_FOUND;
+            // Return 404 not found response.
+            Ok(Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(NOT_FOUND.into())
+                .unwrap())
         }
-    };
-
-    response
-        .headers_mut()
-        .insert(CONTENT_TYPE, HeaderValue::from_static("application/json"));
-
-    Ok(response)
-}
-
-async fn shutdown_signal() {
-    // Wait for the CTRL+C signal
-    tokio::signal::ctrl_c()
-        .await
-        .expect("failed to install CTRL+C signal handler");
+    }
 }
