@@ -1,9 +1,11 @@
 use core::api::forwarder_api::client_request_response;
-use core::static_data::{INDEX, INTERNAL_SERVER_ERROR, NOT_FOUND};
+use core::api::json_data_api::{get_json_data_api, post_json_data_api};
+use core::common::http_response::{get_internal_server_error_response, get_not_found_response};
+use core::static_data::{INDEX, INTERNAL_SERVER_ERROR};
 use core::GenericError;
 use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Client, Method, Request, Response, Server, StatusCode};
+use hyper::{Body, Client, Method, Request, Response, Server};
 
 #[tokio::main]
 async fn main() -> Result<(), GenericError> {
@@ -29,21 +31,10 @@ async fn forward_req(
 ) -> Result<Response<Body>, GenericError> {
     match (req.method(), req.uri().path()) {
         (&Method::GET, "/") => Ok(Response::new(INDEX.into())),
-        (&Method::GET, "/internal-server-error") => Ok(Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(INTERNAL_SERVER_ERROR.into())
-            .unwrap()),
+        (&Method::GET, "/api/json-data") => get_json_data_api().await,
+        (&Method::POST, "/api/json-data") => post_json_data_api(req).await,
+        (&Method::GET, "/internal-server-error") => get_internal_server_error_response(INTERNAL_SERVER_ERROR.into()),
         (&Method::POST, "/forwarder") => client_request_response(&client).await,
-        (&Method::POST, "/forwarder/internal-server-error") => Ok(Response::builder()
-            .status(StatusCode::INTERNAL_SERVER_ERROR)
-            .body(r#"{"message": "Internal server error messages"}"#.into())
-            .unwrap()),
-        _ => {
-            // Return 404 not found response.
-            Ok(Response::builder()
-                .status(StatusCode::NOT_FOUND)
-                .body(NOT_FOUND.into())
-                .unwrap())
-        }
+        _ => get_not_found_response()
     }
 }
