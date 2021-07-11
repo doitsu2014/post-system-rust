@@ -13,7 +13,7 @@ use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Method, Request, Response, Server, StatusCode};
 use routerify::ext::RequestExt;
-use routerify::{Middleware, RequestInfo, Router};
+use routerify::{Middleware, RequestInfo, Router, RouterService};
 use std::convert::Infallible;
 use std::env;
 
@@ -24,13 +24,7 @@ async fn main() -> Result<(), GenericError> {
     let port = env::var("APP_PORT").unwrap_or_else(|_| "1337".into());
     let addr = format!("{}:{}", ip, port).parse().unwrap();
 
-    let client = Client::new();
-    let new_service = make_service_fn(move |_| {
-        let client = client.clone();
-        async { Ok::<_, GenericError>(service_fn(move |req| forward_req(req, client.to_owned()))) }
-    });
-
-    let server = Server::bind(&addr).serve(new_service);
+    let server = Server::bind(&addr).serve(RouterService::new(router()).unwrap());
 
     // And now add a graceful shutdown signal...
     let graceful = server.with_graceful_shutdown(shutdown_signal());
@@ -59,9 +53,9 @@ fn router() -> Router<Body, Infallible> {
         // error handler and middlewares.
         .data(Client::new())
         .middleware(Middleware::pre(logger))
-        .get("/", |req| async { get_ok_json_response(INDEX.into()) })
+        .get("/", |_| async { get_ok_json_response(INDEX.into()) })
         .get("/api/json-data", get_json_data_api)
-        .get("/api/forwarder", get_json_data_api)
+        .get("/api/forwarder", client_request_response)
         .err_handler_with_info(error_handler)
         .build()
         .unwrap()
