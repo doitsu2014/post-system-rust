@@ -4,13 +4,18 @@ extern crate log;
 
 use core::api::forwarder_api::client_request_response;
 use core::api::json_data_api::{get_json_data_api, post_json_data_api};
-use core::common::http_response::{get_internal_server_error_response, get_not_found_response};
+use core::common::http_response::{
+    get_internal_server_error_response, get_not_found_response, get_ok_json_response,
+};
 use core::static_data::{INDEX, INTERNAL_SERVER_ERROR};
 use core::GenericError;
-use std::env;
 use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
-use hyper::{Body, Client, Method, Request, Response, Server};
+use hyper::{Body, Client, Method, Request, Response, Server, StatusCode};
+use routerify::ext::RequestExt;
+use routerify::{Middleware, RequestInfo, Router};
+use std::convert::Infallible;
+use std::env;
 
 #[tokio::main]
 async fn main() -> Result<(), GenericError> {
@@ -25,8 +30,7 @@ async fn main() -> Result<(), GenericError> {
         async { Ok::<_, GenericError>(service_fn(move |req| forward_req(req, client.to_owned()))) }
     });
 
-    let server = Server::bind(&addr)
-        .serve(new_service);
+    let server = Server::bind(&addr).serve(new_service);
 
     // And now add a graceful shutdown signal...
     let graceful = server.with_graceful_shutdown(shutdown_signal());
@@ -47,18 +51,55 @@ async fn shutdown_signal() {
         .expect("failed to install CTRL+C signal handler");
 }
 
-async fn forward_req(
-    req: Request<Body>,
-    client: Client<HttpConnector>,
-) -> Result<Response<Body>, GenericError> {
-    match (req.method(), req.uri().path()) {
-        (&Method::GET, "/") => Ok(Response::new(INDEX.into())),
-        (&Method::GET, "/api/json-data") => get_json_data_api().await,
-        (&Method::POST, "/api/json-data") => post_json_data_api(req).await,
-        (&Method::GET, "/internal-server-error") => {
-            get_internal_server_error_response(INTERNAL_SERVER_ERROR.into())
-        }
-        (&Method::POST, "/forwarder") => client_request_response(&client).await,
-        _ => get_not_found_response(),
-    }
+// Create a `Router<Body, Infallible>` for response body type `hyper::Body`
+// and for handler error type `Infallible`.
+fn router() -> Router<Body, Infallible> {
+    Router::builder()
+        // Specify the state data which will be available to every route handlers,
+        // error handler and middlewares.
+        .data(Client::new())
+        .middleware(Middleware::pre(logger))
+        .get("/", |req| async { get_ok_json_response(INDEX.into()) })
+        .get("/api/json-data", get_json_data_api)
+        .get("/api/forwarder", get_json_data_api)
+        .err_handler_with_info(error_handler)
+        .build()
+        .unwrap()
 }
+
+// A middleware which logs an http request.
+async fn logger(req: Request<Body>) -> Result<Request<Body>, Infallible> {
+    println!(
+        "{} {} {}",
+        req.remote_addr(),
+        req.method(),
+        req.uri().path()
+    );
+    Ok(req)
+}
+
+// Define an error handler function which will accept the `routerify::Error`
+// and the request information and generates an appropriate response.
+async fn error_handler(err: routerify::RouteError, _: RequestInfo) -> Response<Body> {
+    eprintln!("{}", err);
+    Response::builder()
+        .status(StatusCode::INTERNAL_SERVER_ERROR)
+        .body(Body::from(format!("Something went wrong: {}", err)))
+        .unwrap()
+}
+
+// async fn forward_req(
+//     req: Request<Body>,
+//     client: Client<HttpConnector>,
+// ) -> Result<Response<Body>, GenericError> {
+//     match (req.method(), req.uri().path()) {
+//         (&Method::GET, "/") => Ok(Response::new(INDEX.into())),
+//         (&Method::GET, "/api/json-data") => get_json_data_api().await,
+//         (&Method::POST, "/api/json-data") => post_json_data_api(req).await,
+//         (&Method::GET, "/internal-server-error") => {
+//             get_internal_server_error_response(INTERNAL_SERVER_ERROR.into())
+//         }
+//         (&Method::POST, "/forwarder") => client_request_response(&client).await,
+//         _ => get_not_found_response(),
+//     }
+// }
