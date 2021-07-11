@@ -1,10 +1,13 @@
 extern crate pretty_env_logger;
+#[macro_use]
+extern crate log;
 
 use core::api::forwarder_api::client_request_response;
 use core::api::json_data_api::{get_json_data_api, post_json_data_api};
 use core::common::http_response::{get_internal_server_error_response, get_not_found_response};
 use core::static_data::{INDEX, INTERNAL_SERVER_ERROR};
 use core::GenericError;
+use std::env;
 use hyper::client::HttpConnector;
 use hyper::service::{make_service_fn, service_fn};
 use hyper::{Body, Client, Method, Request, Response, Server};
@@ -12,23 +15,27 @@ use hyper::{Body, Client, Method, Request, Response, Server};
 #[tokio::main]
 async fn main() -> Result<(), GenericError> {
     pretty_env_logger::init();
-    let addr = "127.0.0.1:1337".parse().unwrap();
+    let ip = env::var("APP_IP_ADDRESS").unwrap_or_else(|_| "127.0.0.1".into());
+    let port = env::var("APP_PORT").unwrap_or_else(|_| "1337".into());
+    let addr = format!("{}:{}", ip, port).parse().unwrap();
+
     let client = Client::new();
     let new_service = make_service_fn(move |_| {
         let client = client.clone();
         async { Ok::<_, GenericError>(service_fn(move |req| forward_req(req, client.to_owned()))) }
     });
 
-    let server = Server::bind(&addr).serve(new_service);
+    let server = Server::bind(&addr)
+        .serve(new_service);
 
     // And now add a graceful shutdown signal...
     let graceful = server.with_graceful_shutdown(shutdown_signal());
 
     // Run this server for... forever!
-    println!("Listening on http://{}", addr);
+    info!("Application is listenning on http://{}", addr);
 
     if let Err(e) = graceful.await {
-        eprintln!("server error: {}", e);
+        error!("exception: {}", e);
     }
     Ok(())
 }
