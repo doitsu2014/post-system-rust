@@ -1,3 +1,5 @@
+extern crate pretty_env_logger;
+
 use core::api::forwarder_api::client_request_response;
 use core::api::json_data_api::{get_json_data_api, post_json_data_api};
 use core::common::http_response::{get_internal_server_error_response, get_not_found_response};
@@ -10,9 +12,7 @@ use hyper::{Body, Client, Method, Request, Response, Server};
 #[tokio::main]
 async fn main() -> Result<(), GenericError> {
     pretty_env_logger::init();
-
     let addr = "127.0.0.1:1337".parse().unwrap();
-
     let client = Client::new();
     let new_service = make_service_fn(move |_| {
         let client = client.clone();
@@ -26,6 +26,7 @@ async fn main() -> Result<(), GenericError> {
 
     // Run this server for... forever!
     println!("Listening on http://{}", addr);
+
     if let Err(e) = graceful.await {
         eprintln!("server error: {}", e);
     }
