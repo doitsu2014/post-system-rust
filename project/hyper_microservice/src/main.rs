@@ -10,6 +10,7 @@ use hyper::{Body, Client, Method, Request, Response, Server};
 #[tokio::main]
 async fn main() -> Result<(), GenericError> {
     pretty_env_logger::init();
+
     let addr = "127.0.0.1:1337".parse().unwrap();
 
     let client = Client::new();
@@ -20,9 +21,22 @@ async fn main() -> Result<(), GenericError> {
 
     let server = Server::bind(&addr).serve(new_service);
 
+    // And now add a graceful shutdown signal...
+    let graceful = server.with_graceful_shutdown(shutdown_signal());
+
+    // Run this server for... forever!
     println!("Listening on http://{}", addr);
-    server.await?;
+    if let Err(e) = graceful.await {
+        eprintln!("server error: {}", e);
+    }
     Ok(())
+}
+
+async fn shutdown_signal() {
+    // Wait for the CTRL+C signal
+    tokio::signal::ctrl_c()
+        .await
+        .expect("failed to install CTRL+C signal handler");
 }
 
 async fn forward_req(
@@ -33,8 +47,10 @@ async fn forward_req(
         (&Method::GET, "/") => Ok(Response::new(INDEX.into())),
         (&Method::GET, "/api/json-data") => get_json_data_api().await,
         (&Method::POST, "/api/json-data") => post_json_data_api(req).await,
-        (&Method::GET, "/internal-server-error") => get_internal_server_error_response(INTERNAL_SERVER_ERROR.into()),
+        (&Method::GET, "/internal-server-error") => {
+            get_internal_server_error_response(INTERNAL_SERVER_ERROR.into())
+        }
         (&Method::POST, "/forwarder") => client_request_response(&client).await,
-        _ => get_not_found_response()
+        _ => get_not_found_response(),
     }
 }
