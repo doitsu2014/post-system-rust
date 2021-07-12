@@ -3,19 +3,23 @@ extern crate pretty_env_logger;
 extern crate log;
 
 use hyper::{Body, Client, Request, Response, Server, StatusCode};
+use hyper_microservice::api::forwarder_api::client_request_response;
+use hyper_microservice::api::json_data_api::get_json_data_api;
+
 use routerify::ext::RequestExt;
 use routerify::{Middleware, RequestInfo, Router, RouterService};
 use std::convert::Infallible;
 use std::env;
 use core::prelude::*;
 
+
 #[tokio::main]
 async fn main() -> Result<(), Infallible> {
     pretty_env_logger::init();
     let ip = env::var("APP_IP_ADDRESS").unwrap_or_else(|_| "127.0.0.1".into());
-    let port = env::var("APP_PORT").unwrap_or_else(|_| "1337".into());
-    let addr = format!("{}:{}", ip, port).parse().unwrap();
+    let port = env::var("APP_PORT").unwrap_or_else(|_| "33100".into());
 
+    let addr = format!("{}:{}", ip, port).parse().unwrap();
     let server = Server::bind(&addr).serve(RouterService::new(router()).unwrap());
 
     // And now add a graceful shutdown signal...
@@ -23,7 +27,6 @@ async fn main() -> Result<(), Infallible> {
 
     // Run this server for... forever!
     info!("Application is listenning on http://{}", addr);
-
     if let Err(e) = graceful.await {
         error!("exception: {}", e);
     }

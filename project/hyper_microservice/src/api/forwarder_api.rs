@@ -1,5 +1,4 @@
-use crate::common::error_handling::ApiError;
-
+use core::prelude::*;
 use hyper::client::HttpConnector;
 use hyper::{header, Client};
 use hyper::{Body, Method, Request, Response};
