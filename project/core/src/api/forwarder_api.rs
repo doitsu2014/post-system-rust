@@ -1,13 +1,16 @@
-use futures_util::{stream, StreamExt};
-use hyper::body::Bytes;
+use crate::common::error_handling::ApiError;
+
 use hyper::client::HttpConnector;
-use hyper::{header, Client, Error};
+use hyper::{header, Client};
 use hyper::{Body, Method, Request, Response};
 use routerify::prelude::*;
-use std::convert::Infallible;
 
-pub async fn client_request_response(req: Request<Body>) -> Result<Response<Body>, Infallible> {
-    let client = req.data::<Client<HttpConnector, Body>>().unwrap().clone();
+pub async fn client_request_response(req: Request<Body>) -> Result<Response<Body>, ApiError> {
+    let client = match req.data::<Client<HttpConnector, Body>>() {
+        Some(c) => c.clone(),
+        None => return Err(ApiError::Msg("client instance is missing".into()))
+    };
+
     let body = String::from(r#"{"name": "Trần Hữu Đức"}"#);
     let req = Request::builder()
         .method(Method::POST)
@@ -17,18 +20,5 @@ pub async fn client_request_response(req: Request<Body>) -> Result<Response<Body
         .unwrap();
 
     let web_res = client.request(req).await.unwrap();
-    let after = web_res.into_body();
-
-    // Compare the JSON we sent (before) with what we received (after):
-    let before = stream::once(async move {
-        let stream_data = format!(
-            "<b>POST request body</b>: {}<br><b>Response</b>: ",
-            body.clone()
-        );
-        let result = hyper::body::Bytes::from(stream_data);
-        Ok::<Bytes, Error>(result)
-    });
-
-    let body = Body::wrap_stream(before.chain(after));
-    Ok(Response::new(body))
+    Ok(Response::new(web_res.into_body()))
 }
