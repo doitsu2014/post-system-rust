@@ -1,4 +1,3 @@
-extern crate pretty_env_logger;
 #[macro_use]
 extern crate log;
 
@@ -8,6 +7,7 @@ use hyper_microservice::api::json_data_api::get_json_data_api;
 
 use routerify::ext::RequestExt;
 use routerify::{Middleware, RequestInfo, Router, RouterService};
+use core::common::logger::init_logger;
 use std::convert::Infallible;
 use std::env;
 use core::prelude::*;
@@ -15,10 +15,9 @@ use core::prelude::*;
 
 #[tokio::main]
 async fn main() -> Result<(), Infallible> {
-    pretty_env_logger::init();
+    init_logger();
     let ip = env::var("APP_IP_ADDRESS").unwrap_or_else(|_| "127.0.0.1".into());
     let port = env::var("APP_PORT").unwrap_or_else(|_| "33100".into());
-
     let addr = format!("{}:{}", ip, port).parse().unwrap();
     let server = Server::bind(&addr).serve(RouterService::new(router()).unwrap());
 
