@@ -1,2 +1,2 @@
 [workspace]
-members = ['post-system-service']
+members = ['post_system_service']
