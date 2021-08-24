@@ -37,7 +37,6 @@ async fn main() {
         // each request we receive, including data about the request.
         .with(warp::trace::request());
 
-
     tracing::info!("{:?}", setting);
     match setting.tls {
         true => {
