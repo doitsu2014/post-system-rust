@@ -8,6 +8,7 @@ pub struct Setting {
     pub tls: bool,
     pub tls_key_path: String,
     pub tls_cert_path: String,
+    pub log_file_path: String
 }
 
 impl Setting {
@@ -19,6 +20,8 @@ impl Setting {
                 .unwrap_or_else(|_| "tls-certs/localhost/localhost.decrypted.key".to_owned()),
             tls_cert_path: var("TLS_CERT")
                 .unwrap_or_else(|_| "tls-certs/localhost/localhost.crt".to_owned()),
+            log_file_path: var("LOG_FILE")
+                .unwrap_or_else(|_| "./logs".to_owned()),
         }
     }
 }

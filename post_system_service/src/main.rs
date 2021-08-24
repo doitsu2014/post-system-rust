@@ -1,3 +1,5 @@
+use std::io;
+
 use post_system_service::abstraction::Setting;
 use tracing::info;
 use tracing_subscriber::fmt::format::FmtSpan;
@@ -52,6 +54,10 @@ async fn main() {
 }
 
 fn initialize(setting: &Setting) {
+    let file_appender =
+        tracing_appender::rolling::daily(setting.log_file_path.to_owned(), "post_system_service");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+
     // Configure the default `tracing` subscriber.
     // The `fmt` subscriber from the `tracing-subscriber` crate logs `tracing`
     // events to stdout. Other subscribers are available for integrating with
@@ -59,6 +65,7 @@ fn initialize(setting: &Setting) {
     tracing_subscriber::fmt()
         // Use the filter we built above to determine which traces to record.
         .with_env_filter(setting.rust_log.to_owned())
+        .with_writer(non_blocking)
         // Record an event when each span closes. This can be used to time our
         // routes' durations!
         .with_span_events(FmtSpan::CLOSE)
