@@ -21,7 +21,8 @@
 			},
 			"args": [],
 			"env": {
-				"TLS": "true"
+				"TLS": "true",
+				"RUST_LOG": "TRACE,warp=INFO"
 			},
 			"cwd": "${workspaceFolder}"
 		},

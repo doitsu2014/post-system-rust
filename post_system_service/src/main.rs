@@ -1,14 +1,20 @@
 use std::io;
-
-use post_system_service::abstraction::Setting;
 use tracing::info;
-use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::{fmt, layer::SubscriberExt, EnvFilter};
 use warp::Filter;
+use post_system_service::abstraction::Setting;
 
 #[tokio::main()]
 async fn main() {
     let setting = Setting::new();
-    initialize(&setting);
+    let file_appender =
+        tracing_appender::rolling::daily(setting.log_file_path.to_owned(), "post_system_rust.log");
+    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
+    let subscriber = tracing_subscriber::registry()
+        .with(EnvFilter::from_default_env())
+        .with(fmt::Layer::new().with_writer(io::stdout))
+        .with(fmt::Layer::new().with_writer(non_blocking).json());
+    tracing::subscriber::set_global_default(subscriber).expect("Unable to set a global collector");
 
     let hello = warp::path("hello")
         .and(warp::get())
@@ -51,23 +57,4 @@ async fn main() {
         }
         false => warp::serve(routes).run(([127, 0, 0, 1], 3030)).await,
     }
-}
-
-fn initialize(setting: &Setting) {
-    let file_appender =
-        tracing_appender::rolling::daily(setting.log_file_path.to_owned(), "post_system_service");
-    let (non_blocking, _guard) = tracing_appender::non_blocking(file_appender);
-
-    // Configure the default `tracing` subscriber.
-    // The `fmt` subscriber from the `tracing-subscriber` crate logs `tracing`
-    // events to stdout. Other subscribers are available for integrating with
-    // distributed tracing systems such as OpenTelemetry.
-    tracing_subscriber::fmt()
-        // Use the filter we built above to determine which traces to record.
-        .with_env_filter(setting.rust_log.to_owned())
-        .with_writer(non_blocking)
-        // Record an event when each span closes. This can be used to time our
-        // routes' durations!
-        .with_span_events(FmtSpan::CLOSE)
-        .init();
 }

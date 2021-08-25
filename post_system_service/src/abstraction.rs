@@ -4,7 +4,6 @@ use crate::extension::StringExtensions;
 
 #[derive(Debug, Clone)]
 pub struct Setting {
-    pub rust_log: String,
     pub tls: bool,
     pub tls_key_path: String,
     pub tls_cert_path: String,
@@ -14,7 +13,6 @@ pub struct Setting {
 impl Setting {
     pub fn new() -> Setting {
         Setting {
-            rust_log: var("RUST_LOG").unwrap_or_else(|_| "info,tracing=info,warp=debug".to_owned()),
             tls: var("TLS").to_boolean(),
             tls_key_path: var("TLS_KEY")
                 .unwrap_or_else(|_| "tls-certs/localhost/localhost.decrypted.key".to_owned()),
